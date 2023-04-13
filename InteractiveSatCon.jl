@@ -14,6 +14,11 @@ screen_res = (1920, 1080)
 sats_opacity = 1
 orbits_opacity = 0.25
 
+max_sats = 500 # cannot be below 1
+max_sma_R⨁ = 1.1 # cannot be below 1
+max_inc = 90 # cannot be below 0
+max_e = 0.9 # cannot be below 0
+
 function getNp(Ns, percent)
     # for a given Ns, Np can only be factor of Ns
     Np_options = []
@@ -51,7 +56,9 @@ function getNc(Np, percent)
 end
 
 # Observables from interactive (sets default)
-slider_vals_obs = Observable((10, 50., 25., 1.5, 30., 0.))
+slider_vals_obs = Observable((1, 50., 50.,
+    1.5 < max_sma_R⨁ ? 1.5 : max_sma_R⨁,
+    max_inc/2, 0.))
 
 # Observables from satellite
 Ns = Observable(slider_vals_obs[][1])
@@ -88,12 +95,12 @@ function Sliders(slider_vals)
     # Sliders
     sg = SliderGrid(
         f[2, 2:3],
-        (label = "Number of Satellites", range = 1:1:500, format = "{:d}", startvalue = slider_vals[1]),
+        (label = "Number of Satellites", range = 1:1:max_sats, format = "{:d}", startvalue = slider_vals[1]),
         (label = "Number of Planes", range = 0:.1:100, format = "{:.1f} %", startvalue = slider_vals[2]),
         (label = "Configuration", range = 0:.1:100, format = "{:.1f} %", startvalue = slider_vals[3]),
-        (label = "Semi-major Axis", range = 1:.001:10, format = "{:.3f} R⨁", startvalue = slider_vals[4]),
-        (label = "Inclination", range = 0:.01:90, format = "{:.2f} ᵒ", startvalue = slider_vals[5]),
-        (label = "Eccentricity", range = 0:.01:0.9, format = "{:.2f} ", startvalue = slider_vals[6]),
+        (label = "Semi-major Axis", range = 1:.001:max_sma_R⨁, format = "{:.3f} R⨁", startvalue = slider_vals[4]),
+        (label = "Inclination", range = 0:.01:max_inc, format = "{:.2f} ᵒ", startvalue = slider_vals[5]),
+        (label = "Eccentricity", range = 0:.01:max_e, format = "{:.2f} ", startvalue = slider_vals[6]),
         halign = :right
     )
 
@@ -118,10 +125,11 @@ function Buttons()
     # Buttons
     f[2, 1] = menusgrid = GridLayout()
 
-    button = menusgrid[1:3, 1] = [
+    button = menusgrid[1:4, 1] = [
         Button(f, label="Update\n3D Plot", buttoncolor = RGBf(0.8, 0.94, 0.8)),
         Button(f, label="Satellites\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94)),
-        Button(f, label="Orbits\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94))]
+        Button(f, label="Orbits\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94)),
+        Button(f, label="Random\nOrbit", buttoncolor = RGBf(0.94, 0.84, 0.84))]
     
     # Button Uses
     on(button[1].clicks) do click
@@ -143,12 +151,20 @@ function Buttons()
             orbits_color[] = (orbits_color[][1],orbits_opacity)
         end
     end
+
+    on(button[4].clicks) do click
+        slider_vals_obs[] = (10, 50., 25., 1.5, 30., 0.)
+    end
 end
 
 function SatToCart(orbit::Orbit)
     cart = Orbit2Cart(μ, orbit)
 
     return Point3f(cart[1:3])
+end
+
+function selectSats(rect)
+
 end
 
 function setUp(slider_vals)
@@ -179,8 +195,6 @@ function setUp(slider_vals)
     hidespines!(axA)
     hidedecorations!(axA)
     hidespines!(axB)
-
-    Sliders(slider_vals)
 
     # calculate constellation
     constellation = @lift (LatticeFlower2D($Ns, $Np, $Nc))
@@ -215,9 +229,17 @@ function setUp(slider_vals)
         end
     end
 
+    reset_limits!(axA)
+
+    Sliders(slider_vals)
+
     Buttons()
 
-    reset_limits!(axA)
+    srect = select_rectangle(axB)
+
+    on(srect) do rect
+        selectSats(rect)
+    end
 end
 
 setUp(slider_vals_obs[])
