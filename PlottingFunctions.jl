@@ -10,12 +10,12 @@ include("OrbitFunctions.jl")
 # All functions assume figure and 3D axis already created
 
 # Plots 3D Earth with graphic, returns mesh for manipulation (like spinning)
-function EarthPlot()
+function EarthPlot(ax)
     # Earth Image
     earth_img = load(download("https://svs.gsfc.nasa.gov/vis/a000000/a002900/a002915/bluemarble-2048.png"));
 
     # Earth 3D Plot
-    earth_mesh = mesh!(
+    earth_mesh = mesh!(ax,
         Sphere(Point3f0(0), R⨁),
         color = earth_img,
         shading = false,
