@@ -15,7 +15,7 @@ sats_opacity = 1
 orbits_opacity = 0.25
 
 max_sats = 500 # cannot be below 1
-max_sma_R⨁ = 1.1 # cannot be below 1
+max_sma_R⨁ = 10 # cannot be below 1
 max_inc = 90 # cannot be below 0
 max_e = 0.9 # cannot be below 0
 
@@ -75,20 +75,54 @@ elevation = Observable(0.75)
 # Observables for plotting
 title_strA = Observable("")
 title_strB = Observable("")
-sats_color = Observable((:blue, sats_opacity))
-orbits_color = Observable((:blue, orbits_opacity))
+
+function IsSelected(nump)
+    boolarr = []
+
+    for _ in 1:nump
+        push!(boolarr, false)
+    end
+
+    return boolarr
+end
+
+function SatColor(bool_array, opacity, nump)
+    col = []
+
+    for _ in 1:(nump-length(bool_array))
+        push!(bool_array, false)
+    end
+
+    for idx in 1:nump
+        color = bool_array[idx] ? :red : :blue
+        push!(col, (color, opacity))
+    end
+
+    return col
+end
+
+isSelected = Observable(IsSelected(Ns[]))
+
+satOpacity = Observable(sats_opacity)
+orbitOpacity = Observable(orbits_opacity)
+
+sats2d_color = @lift SatColor($isSelected, 1, $Ns)
+sats3d_color = @lift SatColor($isSelected, $satOpacity, $Ns)
+orbits_color = @lift ((:blue, $orbitOpacity))
 
 ## PLOTTING ##
 
 f = Figure(resolution = screen_res)
 display(f)
 
-function updateFigure()
+function updateFig(slider_vals)
     # save camera angles
+    isSectedTemp = isSelected[]
     azimuth[] = f.content[2].azimuth[]
     elevation[] = f.content[2].elevation[]
     empty!(f)
-    setUp(slider_vals_obs[])
+    setUp(slider_vals)
+    isSelected[] = isSectedTemp
 end
 
 function Sliders(slider_vals)
@@ -125,35 +159,60 @@ function Buttons()
     # Buttons
     f[2, 1] = menusgrid = GridLayout()
 
-    button = menusgrid[1:4, 1] = [
+    button = menusgrid[1:2, 1:2] = [
         Button(f, label="Update\n3D Plot", buttoncolor = RGBf(0.8, 0.94, 0.8)),
-        Button(f, label="Satellites\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94)),
+        Button(f, label="Random\nOrbit", buttoncolor = RGBf(0.94, 0.84, 0.84)),
         Button(f, label="Orbits\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94)),
-        Button(f, label="Random\nOrbit", buttoncolor = RGBf(0.94, 0.84, 0.84))]
+        Button(f, label="Satellites\nToggle", buttoncolor = RGBf(0.94, 0.94, 0.94))]
     
-    # Button Uses
+    # Update 3D Plot
     on(button[1].clicks) do click
-        updateFigure()
+        updateFig(slider_vals_obs[])
     end
 
+    # Random Orbit
     on(button[2].clicks) do click
-        if sats_color[][2] == sats_opacity
-            sats_color[] = (sats_color[][1],0)
-        else
-            sats_color[] = (sats_color[][1],sats_opacity)
+        svals = [max_sats - 1, 100., 100., max_sma_R⨁ - 1, max_inc, max_e]
+
+        for idx in 1:6
+            svals[idx] *= rand()
         end
+
+        svals += [1, 0, 0, 1, 0, 0]
+        
+        # making sure rp is not inside of Earth
+        if svals[4]*(1-svals[6]) < 1
+            svals[6] = 1 - (1/svals[4])
+        end
+
+        slider_vals_obs[] = (floor(Int, svals[1]),svals[2],svals[3],svals[4],svals[5],svals[6])
+
+        Ns[] = slider_vals_obs[][1]
+        Np[] = getNp(Ns[],slider_vals_obs[][2])
+        Nc[] = getNc(Np[],slider_vals_obs[][3])
+        a[] = R⨁*slider_vals_obs[][4]
+        i[] = deg2rad(slider_vals_obs[][5])
+        e[] = slider_vals_obs[][6]
+
+        updateFig(slider_vals_obs[])
     end
 
+    # Orbits Toggle
     on(button[3].clicks) do click
-        if orbits_color[][2] == orbits_opacity
-            orbits_color[] = (orbits_color[][1],0)
+        if orbitOpacity[] == orbits_opacity
+            orbitOpacity[] = 0.0
         else
-            orbits_color[] = (orbits_color[][1],orbits_opacity)
+            orbitOpacity[] = orbits_opacity
         end
     end
 
+    # Satellites Toggle
     on(button[4].clicks) do click
-        slider_vals_obs[] = (10, 50., 25., 1.5, 30., 0.)
+        if satOpacity[] == sats_opacity
+            satOpacity[] = 0.0
+        else
+            satOpacity[] = sats_opacity
+        end
     end
 end
 
@@ -163,8 +222,26 @@ function SatToCart(orbit::Orbit)
     return Point3f(cart[1:3])
 end
 
-function selectSats(rect)
+function selectSats(constellation_deg, rect)
+    temp = []
 
+    x = constellation_deg[:,1]
+    y = constellation_deg[:,2]
+
+    for idx in 1:Ns[]
+        if x[idx] < (rect.widths[1]+rect.origin[1]) && x[idx] > rect.origin[1]
+            if y[idx] < (rect.widths[2]+rect.origin[2]) && y[idx] > rect.origin[2]
+                # is selected
+                push!(temp, true)
+            else
+                push!(temp, false)
+            end
+        else
+            push!(temp, false)
+        end
+    end
+
+    isSelected[] = temp
 end
 
 function setUp(slider_vals)
@@ -198,20 +275,12 @@ function setUp(slider_vals)
 
     # calculate constellation
     constellation = @lift (LatticeFlower2D($Ns, $Np, $Nc))
-    con_deg = @lift (rad2deg.($constellation))
-
-    # plot constellation
-    scatter!(axB, con_deg, color=:blue);
+    constellation_deg = @lift (rad2deg.($constellation))
 
     # Now we must get all satellite positions and save them as an observable from constellation
     sats = Observable(Vector{Orbit}())
 
     cartPos = @lift SatToCart.($sats)
-
-    axA
-    EarthPlot()
-
-    scatter!(axA, cartPos, color=sats_color)
 
     θ = zeros(Ns[])
 
@@ -222,13 +291,6 @@ function setUp(slider_vals)
 
     sats[] = eMagOrbit.(a[],e[],i[],constellation[][:,1],θ,0);
 
-    for idx in 1:Ns[]
-        # Plotting Orbits for one satellite in every plane
-        if mod(idx,Ns[]/Np[]) == 0
-            PlotKeplerianOrbit(to_value(sats)[idx], color = orbits_color)
-        end
-    end
-
     reset_limits!(axA)
 
     Sliders(slider_vals)
@@ -238,8 +300,22 @@ function setUp(slider_vals)
     srect = select_rectangle(axB)
 
     on(srect) do rect
-        selectSats(rect)
+        selectSats(constellation_deg[], rect)
+    end
+
+    # plot constellation
+    scatter!(axB, constellation_deg, color = sats2d_color);
+
+    EarthPlot(axA)
+
+    scatter!(axA, cartPos, color = sats3d_color)
+
+    for idx in 1:Ns[]
+        # Plotting Orbits for one satellite in every plane
+        if mod(idx,Ns[]/Np[]) == 0
+            PlotKeplerianOrbit(to_value(sats)[idx], color = orbits_color)
+        end
     end
 end
 
-setUp(slider_vals_obs[])
+setUp(slider_vals_obs[]);
