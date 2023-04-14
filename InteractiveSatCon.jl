@@ -14,7 +14,7 @@ screen_res = (1920, 1080)
 sats_opacity = 1
 orbits_opacity = 0.25
 
-max_sats = 500 # cannot be below 1
+max_sats = 100 # cannot be below 1
 max_sma_R⨁ = 10 # cannot be below 1
 max_inc = 90 # cannot be below 0
 max_e = 0.9 # cannot be below 0
@@ -82,6 +82,16 @@ function SatColor(bool_array, opacity, nump)
     end
 
     return col
+end
+
+function SatText(nump)
+    txt = []
+
+    for idx in 1:nump
+        push!(txt, "$idx")
+    end
+
+    return txt
 end
 
 function UpdateFig(slider_vals)
@@ -156,7 +166,7 @@ function Buttons()
         Button(f, label="Render\nAnimation", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
         Button(f, label="Random\nConstellation", width = buttonwidth, buttoncolor = RGBf(0.94, 0.84, 0.84)),
         Button(f, label="Update\n3D Figure", width = buttonwidth, buttoncolor = RGBf(0.8, 0.94, 0.8)),
-        Button(f, label="Place\nHolder", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
+        Button(f, label="Show\nNumbers", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
         Button(f, label="Show\nSatellites", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
         Button(f, label="Show\nOrbits", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
         Button(f, label="Reset\nSelection", width = buttonwidth, buttoncolor = RGBf(0.94, 0.94, 0.94)),
@@ -200,9 +210,10 @@ function Buttons()
         UpdateFig(slider_vals_obs[])
     end
 
-    # Placeholder
+    # Show Numbers
     on(button[4].clicks) do _
-        
+        txt_bool[] = !txt_bool[]
+        const_bool[] = !const_bool[]
     end
 
     # Satellites Toggle
@@ -293,7 +304,7 @@ function SetUp(slider_vals)
     axB = Axis(gB[1,1], title = title_strB,
         xlabel = "Ω (degrees)", xticks = 0:30:360,
         ylabel = "M (degrees)", yticks = 0:30:360,
-        limits = (-5, 360, -5, 360),
+        limits = (-5, 365, -5, 365),
         xpanlock = true, xzoomlock = true, xrectzoom = false,
         ypanlock = true, yzoomlock = true, yrectzoom = false,
         aspect = 1
@@ -334,7 +345,11 @@ function SetUp(slider_vals)
     end
 
     # plot constellation
-    scatter!(axB, constellation_deg, color = sats2d_color);
+    const_scat = scatter!(axB, constellation_deg, color = sats2d_color, visible = true);
+    const_txt = text!(axB, constellation_deg, text = sats_txt, color = :blue, visible = false, align = (:center, :center));
+
+    connect!(const_scat.visible, const_bool)
+    connect!(const_txt.visible, txt_bool)
 
     EarthPlot(axA)
 
@@ -364,6 +379,9 @@ i = Observable(deg2rad(slider_vals_obs[][5]))
 e = Observable(slider_vals_obs[][6])
 
 # Observables from plotting
+txt_bool = Observable(false)
+const_bool = Observable(true)
+
 azimuth = Observable(0.4)
 elevation = Observable(0.75)
 
@@ -387,6 +405,7 @@ sats = Observable(Vector{Orbit}())
 # calculate colors
 sats2d_color = @lift SatColor($isSelected, 1, $Ns)
 sats3d_color = @lift SatColor($isSelected, $satOpacity, $Ns)
+sats_txt = @lift SatText($Ns)
 orbits_color = @lift ((:blue, $orbitOpacity))
 
 # calculate constellation
