@@ -23,7 +23,7 @@ buttonwidth = 120
 
 # FUNCTIONS
 
-function getNp(Ns, percent)
+function GetNp(Ns, percent)
     # for a given Ns, Np can only be factor of Ns
     Np_options = []
 
@@ -45,7 +45,7 @@ function getNp(Ns, percent)
     return Np_options[idx]
 end
 
-function getNc(Np, percent)
+function GetNc(Np, percent)
     # for a given Np, Nc can be between 0 and Np-1
     Nc_options = 0:1:(Np-1)
 
@@ -59,7 +59,7 @@ function getNc(Np, percent)
     return Nc_options[idx]
 end
 
-function resetSelection(nump)
+function ResetSelection(nump)
     boolarr = []
 
     for _ in 1:nump
@@ -84,13 +84,13 @@ function SatColor(bool_array, opacity, nump)
     return col
 end
 
-function updateFig(slider_vals)
+function UpdateFig(slider_vals)
     # save camera angles
     isSectedTemp = isSelected[]
     azimuth[] = f.content[2].azimuth[]
     elevation[] = f.content[2].elevation[]
     empty!(f)
-    setUp(slider_vals)
+    SetUp(slider_vals)
     isSelected[] = isSectedTemp
 end
 
@@ -113,8 +113,8 @@ function Sliders(slider_vals)
         slider_vals_obs[] = slvalues
 
         Ns[] = slvalues[1]
-        Np[] = getNp(Ns[], slvalues[2])
-        Nc[] = getNc(Np[], slvalues[3])
+        Np[] = GetNp(Ns[], slvalues[2])
+        Nc[] = GetNc(Np[], slvalues[3])
 
         a[] = R⨁*slvalues[4]
         i[] = deg2rad(slvalues[5])
@@ -186,18 +186,18 @@ function Buttons()
         slider_vals_obs[] = (floor(Int, svals[1]),svals[2],svals[3],svals[4],svals[5],svals[6])
 
         Ns[] = slider_vals_obs[][1]
-        Np[] = getNp(Ns[],slider_vals_obs[][2])
-        Nc[] = getNc(Np[],slider_vals_obs[][3])
+        Np[] = GetNp(Ns[],slider_vals_obs[][2])
+        Nc[] = GetNc(Np[],slider_vals_obs[][3])
         a[] = R⨁*slider_vals_obs[][4]
         i[] = deg2rad(slider_vals_obs[][5])
         e[] = slider_vals_obs[][6]
 
-        updateFig(slider_vals_obs[])
+        UpdateFig(slider_vals_obs[])
     end
 
     # Update 3D Plot
     on(button[3].clicks) do _
-        updateFig(slider_vals_obs[])
+        UpdateFig(slider_vals_obs[])
     end
 
     # Placeholder
@@ -225,7 +225,7 @@ function Buttons()
 
     # Reset Selection
     on(button[7].clicks) do _
-        isSelected[] = resetSelection(Ns[])
+        isSelected[] = ResetSelection(Ns[])
         button[8].stored_string = "0"
         button[9].stored_string = "0"
     end
@@ -259,13 +259,13 @@ function Buttons()
     end
 end
 
-function SatToCart(orbit::Orbit)
+function OrbitToPoint(orbit::Orbit)
     cart = Orbit2Cart(μ, orbit)
 
     return Point3f(cart[1:3])
 end
 
-function selectSats(constellation_deg, rect)
+function SelectSats(constellation_deg, rect)
     temp = []
 
     x = constellation_deg[:,1]
@@ -287,10 +287,7 @@ function selectSats(constellation_deg, rect)
     isSelected[] = temp
 end
 
-function setUp(slider_vals)
-    # creating observables for plotting
-    cartPos = Observable([Vector{Point{3, Float32}}()])
-
+function SetUp(slider_vals)
     # 2D
     gB = f[1, 3] = GridLayout()
     axB = Axis(gB[1,1], title = title_strB,
@@ -315,15 +312,6 @@ function setUp(slider_vals)
     hidedecorations!(axA)
     hidespines!(axB)
 
-    # calculate constellation
-    constellation = @lift (LatticeFlower2D($Ns, $Np, $Nc))
-    constellation_deg = @lift (rad2deg.($constellation))
-
-    # Now we must get all satellite positions and save them as an observable from constellation
-    sats = Observable(Vector{Orbit}())
-
-    cartPos = @lift SatToCart.($sats)
-
     θ = zeros(Ns[])
 
     for idx in 1:Ns[]
@@ -342,7 +330,7 @@ function setUp(slider_vals)
     srect = select_rectangle(axB)
 
     on(srect) do rect
-        selectSats(constellation_deg[], rect)
+        SelectSats(constellation_deg[], rect)
     end
 
     # plot constellation
@@ -369,8 +357,8 @@ slider_vals_obs = Observable((1, 50., 50.,
 
 # Observables from satellite
 Ns = Observable(slider_vals_obs[][1])
-Np = Observable(getNp(Ns[],slider_vals_obs[][2]))
-Nc = Observable(getNc(Np[],slider_vals_obs[][3]))
+Np = Observable(GetNp(Ns[],slider_vals_obs[][2]))
+Nc = Observable(GetNc(Np[],slider_vals_obs[][3]))
 a = Observable(R⨁*slider_vals_obs[][4])
 i = Observable(deg2rad(slider_vals_obs[][5]))
 e = Observable(slider_vals_obs[][6])
@@ -383,7 +371,7 @@ elevation = Observable(0.75)
 title_strA = Observable("")
 title_strB = Observable("")
 
-isSelected = Observable(resetSelection(Ns[]))
+isSelected = Observable(ResetSelection(Ns[]))
 
 selection_start = Observable(0)
 selection_end = Observable(0)
@@ -391,13 +379,24 @@ selection_end = Observable(0)
 satOpacity = Observable(sats_opacity)
 orbitOpacity = Observable(orbits_opacity)
 
+cartPos = Observable([Vector{Point{3, Float32}}()])
+sats = Observable(Vector{Orbit}())
+
+# Observable calculations
+
+# calculate colors
 sats2d_color = @lift SatColor($isSelected, 1, $Ns)
 sats3d_color = @lift SatColor($isSelected, $satOpacity, $Ns)
 orbits_color = @lift ((:blue, $orbitOpacity))
+
+# calculate constellation
+constellation = @lift (LatticeFlower2D($Ns, $Np, $Nc))
+constellation_deg = @lift (rad2deg.($constellation))
+cartPos = @lift OrbitToPoint.($sats)
 
 ## PLOTTING ##
 
 f = Figure(resolution = screen_res)
 display(f)
 
-setUp(slider_vals_obs[]);
+SetUp(slider_vals_obs[]);
